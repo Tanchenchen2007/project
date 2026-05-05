@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>3D 汉诺塔游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(to bottom, #87CEEB, #E6E6FA);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 0;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .control {
+            margin: 10px 0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 6px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        #stepCount {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        /* 游戏舞台 3D 效果 */
+        .game-area {
+            perspective: 1000px;
+            margin-top: 40px;
+        }
+
+        .pegs-container {
+            display: flex;
+            justify-content: center;
+            gap: 120px;
+            transform: rotateX(20deg);
+            position: relative;
+            width: 600px;
+            height: 300px;
+        }
+
+        /* 柱子 */
+        .peg {
+            width: 12px;
+            height: 180px;
+            background: linear-gradient(to right, #8B4513, #CD853F);
+            position: relative;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            cursor: pointer;
+            padding-bottom: 5px;
+        }
+
+        .peg::before {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 12px;
+            background: #666;
+            border-radius: 4px;
+        }
+
+        /* 盘子 */
+        .disk {
+            height: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+
+        /* 选中效果 */
+        .peg.selected .disk:first-child {
+            transform: translateY(-15px);
+            box-shadow: 0 0 15px yellow;
+        }
+
+        /* 非法移动抖动 */
+        @keyframes shake {
+            0%,100%{transform:translateX(0);}
+            25%{transform:translateX(-5px);}
+            75%{transform:translateX(5px);}
+        }
+        .warn {
+            animation: shake 0.3s;
+        }
+
+        /* 胜利动画 */
+        #win {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #FF4500;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<h1>3D 汉诺塔游戏</h1>
+<div class="control">
+    <label>圆盘数量：
+        <select id="diskNum">
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5" selected>5</option>
+            <option value="6">6</option>
+        </select>
+    </label>
+    <button id="resetBtn">重置游戏</button>
+    <button id="autoBtn">自动求解</button>
+    <div>步数：<span id="stepCount">0</span></div>
+</div>
+
+<div class="game-area">
+    <div class="pegs-container">
+        <div class="peg" data-idx="0"></div>
+        <div class="peg" data-idx="1"></div>
+        <div class="peg" data-idx="2"></div>
+    </div>
+</div>
+
+<div id="win">恭喜你，通关成功！🎉</div>
+
+<script>
+    // ====================== 游戏数据 ======================
+    const game = {
+        diskCount: 5,
+        pegs: [[], [], []],
+        step: 0,
+        selected: null,
+        isAuto: false
+    };
+
+    const colors = [
+        '#FF5252', '#FF9100', '#FFEA00',
+        '#00E676', '#2979FF', '#651FFF', '#D500F9'
+    ];
+
+    // ====================== 渲染盘子 ======================
+    function render() {
+        const pegs = document.querySelectorAll('.peg');
+        pegs.forEach((peg, i) => {
+            peg.innerHTML = '';
+            game.pegs[i].forEach(size => {
+                const d = document.createElement('div');
+                d.className = 'disk';
+                d.style.width = `${size * 25 + 50}px`;
+                d.style.backgroundColor = colors[size - 1];
+                peg.appendChild(d);
+            });
+        });
+        document.getElementById('stepCount').textContent = game.step;
+        checkWin();
+    }
+
+    // ====================== 初始化 ======================
+    function init() {
+        game.diskCount = Number(document.getElementById('diskNum').value);
+        game.pegs = [[], [], []];
+        game.step = 0;
+        game.selected = null;
+        game.isAuto = false;
+
+        for (let i = game.diskCount; i >= 1; i--) {
+            game.pegs[0].push(i);
+        }
+        document.getElementById('win').style.display = 'none';
+        render();
+    }
+
+    // ====================== 移动逻辑 ======================
+    function move(from, to) {
+        const arrFrom = game.pegs[from];
+        const arrTo = game.pegs[to];
+        if (arrFrom.length === 0) return false;
+        const top = arrFrom[arrFrom.length - 1];
+        if (arrTo.length && arrTo[arrTo.length - 1] < top) return false;
+
+        arrFrom.pop();
+        arrTo.push(top);
+        game.step++;
+        return true;
+    }
+
+    // ====================== 点击柱子 ======================
+    document.querySelectorAll('.peg').forEach(peg => {
+        peg.addEventListener('click', () => {
+            if (game.isAuto) return;
+            const idx = Number(peg.dataset.idx);
+
+            if (game.selected === null) {
+                if (game.pegs[idx].length === 0) return;
+                game.selected = idx;
+                peg.classList.add('selected');
+            } else {
+                const from = game.selected;
+                document.querySelector('.peg.selected')?.classList.remove('selected');
+                const ok = move(from, idx);
+
+                if (!ok) {
+                    document.querySelector('.pegs-container').classList.add('warn');
+                    setTimeout(() => {
+                        document.querySelector('.pegs-container').classList.remove('warn');
+                    }, 300);
+                }
+
+                game.selected = null;
+                render();
+            }
+        });
+    });
+
+    // ====================== 胜利判断 ======================
+    function checkWin() {
+        if (game.pegs[2].length === game.diskCount) {
+            document.getElementById('win').style.display = 'block';
+        }
+    }
+
+    // ====================== 自动求解（递归） ======================
+    async function autoSolve(n, from, to, via) {
+        if (n === 0) return;
+        game.isAuto = true;
+        await autoSolve(n - 1, from, via, to);
+        move(from, to);
+        render();
+        await delay(600);
+        await autoSolve(n - 1, via, to, from);
+        if (n === game.diskCount) game.isAuto = false;
+    }
+
+    function delay(ms) {
+        return new Promise(res => setTimeout(res, ms));
+    }
+
+    // ====================== 按钮事件 ======================
+    document.getElementById('resetBtn').addEventListener('click', init);
+    document.getElementById('autoBtn').addEventListener('click', () => {
+        if (game.isAuto) return;
+        autoSolve(game.diskCount, 0, 2, 1);
+    });
+
+    // 开始游戏
+    window.onload = init;
+</script>
+</body>
+</html>
